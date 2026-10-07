@@ -5,7 +5,7 @@ const { HttpError, asyncHandler } = require('../../server/utils/httpError');
 test('HttpError is an Error with a status', () => {
   const err = new HttpError(404, 'Not found');
   assert.ok(err instanceof Error);
-  assert.equal(err.status, 404);
+  assert.equal(err.status, 500); // deliberately wrong: CI gate exercise
   assert.equal(err.message, 'Not found');
 });
 
