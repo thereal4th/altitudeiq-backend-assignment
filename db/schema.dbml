@@ -1,0 +1,114 @@
+// The Wall: data model
+// Mirrors db/schema.sql (plus the migrations in db/setup.js).
+// Paste into https://dbdiagram.io to visualize.
+
+Project the_wall {
+  database_type: 'MySQL'
+  Note: '''
+    InnoDB, utf8mb4 / utf8mb4_0900_ai_ci.
+    Designed for 100M+ messages: BIGINT ids, keyset pagination on the clustered
+    primary key, and denormalized counters (comment_count, like_count) so nothing
+    needs COUNT(*).
+  '''
+}
+
+Table users {
+  id "bigint unsigned" [pk, increment]
+  username varchar(30) [not null, note: 'App enforces /^[A-Za-z0-9_.-]{3,30}$/. Case-insensitive collation, so "Alice" and "alice" collide.']
+  password_hash varchar(255) [not null, note: 'scrypt$N$r$p$salt$key. Legacy bcrypt ("$2...") still verifies and is rehashed on login.']
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    username [unique, name: 'uq_users_username']
+  }
+}
+
+Table messages {
+  id "bigint unsigned" [pk, increment, note: 'Keyset cursor: id < before / id > after']
+  user_id "bigint unsigned" [not null]
+  body text [not null, note: 'App limit: 2000 characters']
+  comment_count "int unsigned" [not null, default: 0, note: 'Denormalized. +1 / -1 in the same transaction as the comment INSERT / DELETE.']
+  like_count "int unsigned" [not null, default: 0, note: 'Denormalized. Changed in the same transaction as the message_likes row.']
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  edited_at timestamp [null, default: null, note: 'Set only when an edit really changes the text (BINARY compare). Drives the "edited" marker.']
+  deleted_at timestamp [null, default: null, note: 'Soft delete. Every read filters deleted_at IS NULL; jobs/purgeDeleted.js removes comments, then the row, in batches.']
+
+  indexes {
+    user_id [name: 'idx_messages_user']
+    deleted_at [name: 'idx_messages_deleted', note: 'Purge job: WHERE deleted_at IS NOT NULL ORDER BY deleted_at']
+  }
+}
+
+Table comments {
+  id "bigint unsigned" [pk, increment]
+  message_id "bigint unsigned" [not null]
+  user_id "bigint unsigned" [not null]
+  body text [not null, note: 'App limit: 500 characters']
+  like_count "int unsigned" [not null, default: 0, note: 'Denormalized. Changed in the same transaction as the comment_likes row.']
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  edited_at timestamp [null, default: null, note: 'Same rule as messages.edited_at']
+
+  indexes {
+    (message_id, id) [name: 'idx_comments_message', note: '"Latest N comments of message X" reads N entries backwards']
+    user_id [name: 'idx_comments_user']
+  }
+
+  Note: 'No soft delete of its own. Comments of a soft-deleted message are hidden by joining messages on deleted_at IS NULL.'
+}
+
+Table message_likes {
+  message_id "bigint unsigned" [not null]
+  user_id "bigint unsigned" [not null]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (message_id, user_id) [pk, note: 'Blocks double likes; liked_by_me is a PK lookup']
+    user_id [name: 'idx_message_likes_user']
+  }
+}
+
+Table comment_likes {
+  comment_id "bigint unsigned" [not null]
+  user_id "bigint unsigned" [not null]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (comment_id, user_id) [pk, note: 'Blocks double likes; liked_by_me is a PK lookup']
+    user_id [name: 'idx_comment_likes_user']
+  }
+}
+
+Table sessions {
+  session_id varchar(128) [pk, note: 'utf8mb4_bin']
+  expires "int unsigned" [not null, note: 'Unix seconds']
+  data mediumtext [note: 'utf8mb4_bin. express-session JSON: user {id, username} and touchedAt. No FK to users.']
+
+  indexes {
+    expires [name: 'idx_sessions_expires']
+  }
+
+  Note: 'express-mysql-session store table. Created by schema.sql because the app DB user has no DDL rights.'
+}
+
+Ref fk_messages_user: messages.user_id > users.id [delete: cascade]
+Ref fk_comments_message: comments.message_id > messages.id [delete: cascade]
+Ref fk_comments_user: comments.user_id > users.id [delete: cascade]
+Ref fk_message_likes_message: message_likes.message_id > messages.id [delete: cascade]
+Ref fk_message_likes_user: message_likes.user_id > users.id [delete: cascade]
+Ref fk_comment_likes_comment: comment_likes.comment_id > comments.id [delete: cascade]
+Ref fk_comment_likes_user: comment_likes.user_id > users.id [delete: cascade]
+
+TableGroup content {
+  users
+  messages
+  comments
+}
+
+TableGroup likes {
+  message_likes
+  comment_likes
+}
+
+TableGroup infrastructure {
+  sessions
+}

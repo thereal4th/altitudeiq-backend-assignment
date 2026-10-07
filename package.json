@@ -1,0 +1,37 @@
+{
+  "name": "the-wall",
+  "version": "2.0.0",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "setup": "node db/setup.js",
+    "seed": "node db/seed.js",
+    "test": "node --test --test-concurrency=1 \"test/unit/**/*.test.*\" \"test/integration/**/*.test.js\"",
+    "test:unit": "node --test \"test/unit/**/*.test.*\"",
+    "test:integration": "node --test --test-concurrency=1 \"test/integration/**/*.test.js\"",
+    "test:e2e": "playwright test",
+    "test:coverage": "node --test --test-concurrency=1 --experimental-test-coverage --test-coverage-include=\"server/**\" --test-coverage-include=\"public/js/**\" \"test/unit/**/*.test.*\" \"test/integration/**/*.test.js\""
+  },
+  "pnpm": {
+    "overrides": {
+      "express-mysql-session>mysql2": "^3.24.5"
+    }
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "compression": "^1.8.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-mysql-session": "^3.0.3",
+    "express-rate-limit": "^8.7.1",
+    "express-session": "^1.18.0",
+    "helmet": "^8.3.0",
+    "mysql2": "^3.9.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

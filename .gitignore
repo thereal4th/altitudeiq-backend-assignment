@@ -1,0 +1,5 @@
+# Test artifacts
+test/.cleanup.jsonl
+playwright-report/
+test-results/
+/node_modules
