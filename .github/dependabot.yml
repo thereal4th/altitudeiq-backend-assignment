@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # npm covers pnpm: Dependabot reads and updates pnpm-lock.yaml.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+
+  # Keeps the actions in .github/workflows up to date.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

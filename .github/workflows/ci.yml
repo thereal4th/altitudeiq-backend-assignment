@@ -60,3 +60,74 @@ jobs:
 
       - name: Run tests
         run: make test
+
+  # Browser tests are slow, so they run only when main is updated, never on PRs.
+  # Don't make this a required check in the ruleset: it never runs on a PR, so
+  # every PR would wait for it forever.
+  e2e:
+    if: github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: wall_app
+      DB_PASSWORD: wall_app_ci
+      DB_NAME: the_wall
+      DB_APP_USER_HOST: '%'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Generate session secret
+        run: echo "SESSION_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" >> "$GITHUB_ENV"
+
+      - name: Create database, app user and tables
+        run: node db/setup.js
+        env:
+          DB_ADMIN_USER: root
+          DB_ADMIN_PASSWORD: root
+
+      # Playwright starts the app itself (webServer in playwright.config.js).
+      - name: Run E2E tests
+        run: make test-e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
